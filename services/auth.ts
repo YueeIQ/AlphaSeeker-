@@ -4,21 +4,34 @@ import { User, UserCloudData } from '../types';
 const API_BASE = "/api/kv";
 const APP_PREFIX = "alphaseeker_v1_user_";
 
+// Helper: Convert string to Hex to ensure absolute URL safety for Keys (avoids @, ., / issues in proxy)
+const toHex = (str: string): string => {
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    result += str.charCodeAt(i).toString(16).padStart(2, '0');
+  }
+  return result;
+};
+
+// Helper: Encode data for URL value (Base64 -> URL Safe Base64)
 const encodeData = (data: any): string => {
   const json = JSON.stringify(data);
-  // Base64 encode to hide plain text
+  // 1. Unicode safe Base64 encoding
   const base64 = btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (match, p1) => {
     return String.fromCharCode(parseInt(p1, 16));
   }));
-  return encodeURIComponent(base64);
+  // 2. Make it URL safe (replace / with _ and + with -) to avoid proxy path issues
+  return base64.replace(/\//g, '_').replace(/\+/g, '-');
 };
 
 const decodeData = (encoded: string): any => {
   try {
-    // Robust check: if response is HTML (error page) or empty, return null
     if (!encoded || encoded.trim().startsWith('<')) return null;
     
-    const base64 = decodeURIComponent(encoded);
+    // 1. Restore standard Base64
+    let base64 = encoded.replace(/_/g, '/').replace(/-/g, '+');
+    
+    // 2. Decode Unicode safe Base64
     const json = decodeURIComponent(Array.prototype.map.call(atob(base64), (c: string) => {
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
@@ -42,13 +55,12 @@ export const AuthService = {
 
   // REGISTER
   register: async (email: string, password: string): Promise<User> => {
-    // URL Encode the key to ensure special chars like @ don't break the path
-    const safeKey = encodeURIComponent(`${APP_PREFIX}${email}`);
+    // FIX: Use Hex encoded email for the key to avoid special chars like @ in URL path
+    const safeKey = `${APP_PREFIX}${toHex(email)}`;
 
     // 1. Check if user exists
     const checkRes = await fetch(`${API_BASE}/${safeKey}`);
     
-    // If status is 200, data might exist. If 404, it definitely doesn't.
     if (checkRes.ok) {
         const checkData = await checkRes.text();
         // If we got valid data back, user exists
@@ -74,12 +86,12 @@ export const AuthService = {
 
   // LOGIN
   login: async (email: string, password: string): Promise<User> => {
-    const safeKey = encodeURIComponent(`${APP_PREFIX}${email}`);
+    const safeKey = `${APP_PREFIX}${toHex(email)}`;
     
     try {
       const res = await fetch(`${API_BASE}/${safeKey}`);
       
-      // Handle 404 (Key not found) specifically
+      // Handle 404 (Key not found)
       if (res.status === 404) {
          throw new Error('账号不存在，请先注册');
       }
@@ -111,7 +123,7 @@ export const AuthService = {
 
   // SAVE
   saveData: async (email: string, data: UserCloudData): Promise<void> => {
-    const safeKey = encodeURIComponent(`${APP_PREFIX}${email}`);
+    const safeKey = `${APP_PREFIX}${toHex(email)}`;
     
     // Fetch current to preserve password
     const res = await fetch(`${API_BASE}/${safeKey}`);
@@ -137,7 +149,7 @@ export const AuthService = {
 
   // LOAD
   loadData: async (email: string): Promise<UserCloudData | null> => {
-    const safeKey = encodeURIComponent(`${APP_PREFIX}${email}`);
+    const safeKey = `${APP_PREFIX}${toHex(email)}`;
     
     const res = await fetch(`${API_BASE}/${safeKey}`);
     if (!res.ok) return null;
