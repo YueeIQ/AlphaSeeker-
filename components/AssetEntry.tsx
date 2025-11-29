@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AssetType, Asset } from '../types';
 import { Plus, Upload, X, Loader2 } from 'lucide-react';
@@ -52,9 +51,12 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onClose }) => {
     e.preventDefault();
     setIsProcessing(true);
     
+    // Clean and normalize code input
+    const cleanCode = formData.code.replace(/^(sh|sz|of)/i, '').trim();
+
     const rawAsset = {
-      name: formData.name || formData.code,
-      code: formData.code,
+      name: formData.name || cleanCode,
+      code: cleanCode,
       type: formData.type,
       quantity: parseFloat(formData.quantity),
       costBasis: parseFloat(formData.costBasis),
@@ -89,7 +91,7 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onClose }) => {
         // user input: Name, Type, Code, Cost, Quantity
         const inputName = parts[0].trim();
         const inputTypeStr = parts[1].trim();
-        const inputCode = parts[2].trim();
+        const inputCode = parts[2].replace(/^(sh|sz|of)/i, '').trim(); // Clean batch codes too
         const inputCost = parseFloat(parts[3]);
         const inputQty = parseFloat(parts[4]);
 

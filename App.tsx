@@ -148,22 +148,30 @@ const App: React.FC = () => {
     };
   }, [assets, cashBalance]);
 
+  // Helper to normalize codes for comparison (e.g. "518880" vs "sh518880")
+  const normalizeCode = (code: string) => {
+    if (!code) return '';
+    return code.replace(/^(sh|sz|of)/i, '').trim().toUpperCase();
+  };
+
   const handleAddAssets = (newAssets: Omit<Asset, 'id' | 'lastUpdated'>[]) => {
     setAssets(prevAssets => {
       const nextAssets = [...prevAssets];
 
       newAssets.forEach(newItem => {
-        // If code exists, find index
+        const newItemCode = normalizeCode(newItem.code);
+
+        // Try to find existing asset by normalized code
         const existingIndex = nextAssets.findIndex(
-          a => a.code && newItem.code && a.code.toUpperCase() === newItem.code.toUpperCase()
+          a => normalizeCode(a.code) === newItemCode
         );
 
         if (existingIndex > -1) {
-          // Merge Logic
+          // Merge Logic: Incremental Update
           const existing = nextAssets[existingIndex];
           const totalQty = existing.quantity + newItem.quantity;
           
-          // Weighted Average Cost
+          // Weighted Average Cost Calculation
           // (OldQty * OldCost + NewQty * NewCost) / TotalQty
           const totalCostVal = (existing.quantity * existing.costBasis) + (newItem.quantity * newItem.costBasis);
           const weightedCost = totalQty > 0 ? totalCostVal / totalQty : 0;
@@ -173,7 +181,7 @@ const App: React.FC = () => {
             ...existing,
             quantity: totalQty,
             costBasis: weightedCost,
-            // Optionally update name if the new one is better, but usually keep existing or update from API
+            // Keep the official name if it exists, or update if user provided a better one (optional, keeping existing for stability)
             lastUpdated: new Date().toISOString()
           };
         } else {
