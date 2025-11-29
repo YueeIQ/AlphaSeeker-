@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, RefreshCcw, TrendingUp, DollarSign, PieChart as PieIcon, Wallet, Coins, Settings, UserCircle, LogOut, Cloud, Download, Upload } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, RefreshCcw, TrendingUp, DollarSign, PieChart as PieIcon, Wallet, Coins, Settings, UserCircle, LogOut, Cloud } from 'lucide-react';
 import { Asset, PortfolioSummary, AssetType, TargetStrategy, User, UserCloudData } from './types';
 import { INITIAL_ASSETS, DEFAULT_STRATEGY } from './constants';
 import { fetchLatestPrices } from './services/market';
@@ -39,9 +39,6 @@ const App: React.FC = () => {
   const [newCashInput, setNewCashInput] = useState('');
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
 
-  // Hidden File Input for Import
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   // --- Effects ---
 
   // 1. Initialize User Session
@@ -64,7 +61,7 @@ const App: React.FC = () => {
     let timeoutId: ReturnType<typeof setTimeout>;
     if (user) {
       setIsSyncing(true);
-      // Debounce the save to avoid hammering the "server"
+      // Debounce the save to avoid hammering the API
       timeoutId = setTimeout(() => {
         const cloudData: UserCloudData = {
           assets,
@@ -72,10 +69,13 @@ const App: React.FC = () => {
           strategy,
           lastSynced: Date.now()
         };
-        AuthService.saveData(user.email, cloudData).then(() => {
-          setIsSyncing(false);
-        });
-      }, 2000);
+        AuthService.saveData(user.email, cloudData)
+          .then(() => setIsSyncing(false))
+          .catch(err => {
+             console.error("Sync failed", err);
+             setIsSyncing(false); 
+          });
+      }, 3000);
     }
     return () => clearTimeout(timeoutId);
   }, [assets, cashBalance, strategy, user]);
@@ -86,72 +86,21 @@ const App: React.FC = () => {
   const handleLoginSuccess = (loggedInUser: User, cloudData: UserCloudData | null) => {
     setUser(loggedInUser);
     if (cloudData) {
-      // If we found data in the cloud, ask user.
-      if (confirm('检测到云端有历史备份数据，是否加载并覆盖当前页面？')) {
-        setAssets(cloudData.assets);
-        setCashBalance(cloudData.cashBalance);
-        setStrategy(cloudData.strategy);
+      // Logic: If logging in, usually we want to see our remote data.
+      // We can prompt to confirm overwriting local data.
+      if (confirm('登录成功！检测到云端存档，是否加载并覆盖当前页面数据？')) {
+        if (cloudData.assets) setAssets(cloudData.assets);
+        if (typeof cloudData.cashBalance === 'number') setCashBalance(cloudData.cashBalance);
+        if (cloudData.strategy) setStrategy(cloudData.strategy);
       }
     }
   };
 
   const handleLogout = () => {
-    if(confirm('确定要退出登录吗？退出后将停止自动同步。')) {
+    if(confirm('确定要退出登录吗？退出后将停止云端同步。')) {
       AuthService.logout();
       setUser(null);
     }
-  };
-
-  // Export Data to JSON File
-  const handleExport = () => {
-    const data = {
-      assets,
-      cashBalance,
-      strategy,
-      exportDate: new Date().toISOString(),
-      appName: "AlphaSeeker"
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AlphaSeeker_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Import Data from JSON File
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        
-        // Basic Validation
-        if (!json.assets || !Array.isArray(json.assets)) {
-           throw new Error("Invalid format");
-        }
-
-        if (confirm(`成功解析备份文件 (${json.exportDate?.split('T')[0] || '未知日期'})。\n是否覆盖当前所有数据？此操作不可撤销。`)) {
-           setAssets(json.assets);
-           setCashBalance(typeof json.cashBalance === 'number' ? json.cashBalance : 0);
-           if (json.strategy) setStrategy(json.strategy);
-           alert('数据已成功恢复！');
-        }
-      } catch (err) {
-        alert('读取备份文件失败，请确保文件格式正确。');
-        console.error(err);
-      } finally {
-        // Reset input so same file can be selected again if needed
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-    };
-    reader.readAsText(file);
   };
 
 
@@ -277,15 +226,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
-      {/* Hidden Import Input */}
-      <input 
-        type="file" 
-        ref={fileInputRef}
-        onChange={handleImport}
-        accept=".json"
-        className="hidden"
-      />
-
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -298,32 +238,14 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-3">
-             {/* Data Tools: Import/Export */}
-             <div className="flex items-center gap-1 border-r border-gray-100 pr-2 mr-1">
-                <button 
-                  onClick={handleExport}
-                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition"
-                  title="下载备份 (导出数据)"
-                >
-                  <Download size={18} />
-                </button>
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition"
-                  title="恢复数据 (导入备份)"
-                >
-                  <Upload size={18} />
-                </button>
-             </div>
-
              {/* Auth Section */}
              {user ? (
-               <div className="flex items-center gap-3 mr-2 pl-2">
+               <div className="flex items-center gap-3 mr-2 pl-2 border-l border-gray-100">
                   <div className="flex flex-col items-end hidden md:flex">
                      <span className="text-sm font-bold text-gray-800">{user.name}</span>
                      <span className="text-xs text-indigo-500 flex items-center gap-1">
-                       {isSyncing ? '同步中...' : '已同步'}
-                       {isSyncing && <Cloud size={10} className="animate-pulse"/>}
+                       {isSyncing ? '云同步中...' : '云端已同步'}
+                       {isSyncing ? <Cloud size={10} className="animate-pulse"/> : <Cloud size={10} />}
                      </span>
                   </div>
                   <div className="bg-indigo-50 p-1.5 rounded-full text-indigo-600">
