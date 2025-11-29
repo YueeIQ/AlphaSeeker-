@@ -30,7 +30,7 @@ export const AuthService = {
     const userRecord = db[email];
 
     if (!userRecord || userRecord.password !== password) {
-      throw new Error('邮箱或密码错误');
+      throw new Error('账号或密码错误。注意：账号仅保存在当前浏览器，若更换了设备，请使用“恢复数据”功能导入备份。');
     }
 
     const user: User = { email, name: email.split('@')[0] };

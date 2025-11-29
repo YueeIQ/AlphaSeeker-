@@ -64,11 +64,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
 
         {/* Body */}
         <div className="p-8">
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            {isLoginMode 
-              ? '登录以同步您的投资组合数据，找回之前的记录。' 
-              : '注册账号将自动保存您当前录入的所有资产信息到云端。'}
-          </p>
+          {/* Local Mode Warning */}
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6 flex items-start gap-3">
+             <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+             <div>
+               <h4 className="text-sm font-bold text-amber-800">重要提示：本地模式</h4>
+               <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                 账号信息仅保存在<strong>当前浏览器</strong>。若需跨设备同步，请使用主界面的 <strong>"下载备份"</strong> 和 <strong>"恢复数据"</strong> 功能。
+               </p>
+             </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
