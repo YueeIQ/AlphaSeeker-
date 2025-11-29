@@ -2,12 +2,13 @@ import { GoogleGenAI } from "@google/genai";
 import { Asset, PortfolioSummary, TargetStrategy, AssetType } from '../types';
 
 const getClient = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY
+  // Use process.env.API_KEY as per Google GenAI SDK guidelines
   const apiKey = process.env.API_KEY;
   
+  // 强制校验逻辑
   if (!apiKey) {
-    console.error("Missing API Key.");
-    throw new Error("API Key not found in environment (process.env.API_KEY)");
+    console.error("API_KEY not found in process.env");
+    throw new Error("API_KEY not found, please check your environment settings.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -70,6 +71,7 @@ export const generateStrategyReport = async (
     return response.text || "无法生成分析报告。";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "生成策略报告时出错，请检查 API Key 配置是否正确。";
+    // 这里的错误信息会直接显示在前端，方便你调试
+    return `生成策略报告时出错: ${error instanceof Error ? error.message : String(error)}`;
   }
 };
