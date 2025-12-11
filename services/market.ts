@@ -1,4 +1,3 @@
-
 import { Asset, AssetType } from '../types';
 
 // Fallback Mock Data for assets that Tiantian Fund (Eastmoney) might not cover (e.g., specific US stocks, Crypto)
@@ -10,17 +9,9 @@ const FALLBACK_DB: Record<string, { name: string; price: number; type?: AssetTyp
   'IBIT': { name: 'iShares Bitcoin Trust', price: 38.50, type: AssetType.BITCOIN },
 };
 
-interface TiantianResponse {
-  fundcode: string;
-  name: string;
-  jzrq: string; // Net Value Date (Official)
-  dwjz: string; // Unit Net Value (Official Final)
-  gsz: string;  // Estimated Realtime Value (Intraday)
-  gszzl: string; // Growth Rate
-  gztime: string; // Estimate Time
-}
-
-// Global queue to handle JSONP requests sequentially because window.jsonpgz is a single global callback
+// Global queue to handle requests sequentially.
+// This is critical because the pingzhongdata interface sets global window variables.
+// Running requests in parallel would cause race conditions where variables are overwritten.
 let requestQueue: (() => Promise<void>)[] = [];
 let isProcessingQueue = false;
 
@@ -45,21 +36,37 @@ const fetchFromTiantian = (code: string): Promise<{ name: string; price: number;
     requestQueue.push(() => {
       return new Promise<void>((done) => {
         let isDone = false;
-        const SCRIPT_TIMEOUT = 5000; // 5 seconds timeout
+        // Pingzhongdata files can be larger (historical data), so we allow a bit more time
+        const SCRIPT_TIMEOUT = 8000; 
+
+        const script = document.createElement('script');
 
         // Cleanup helper
         const cleanup = () => {
           if (isDone) return;
           isDone = true;
 
-          // Decouple callback
-          if ((window as any).jsonpgz === callback) {
-             (window as any).jsonpgz = () => {}; 
-          }
-          // Remove script
+          // Remove script tag
           if (script && document.body.contains(script)) {
             document.body.removeChild(script);
           }
+          
+          // Clean up globals set by Eastmoney pingzhongdata script to avoid memory leaks
+          try {
+            delete (window as any).fS_name;
+            delete (window as any).fS_code;
+            delete (window as any).Data_netWorthTrend;
+            delete (window as any).Data_ACWorthTrend;
+            // Common other globals set by this interface
+            delete (window as any).Data_grandTotal;
+            delete (window as any).Data_rateInSimilarType;
+            delete (window as any).Data_fluctuationScale;
+            delete (window as any).Data_holderStructure;
+            delete (window as any).Data_assetAllocation;
+          } catch (e) {
+            // ignore
+          }
+          
           clearTimeout(timeoutId);
         };
 
@@ -76,45 +83,46 @@ const fetchFromTiantian = (code: string): Promise<{ name: string; price: number;
           complete(null);
         }, SCRIPT_TIMEOUT);
 
-        const callback = (data: TiantianResponse) => {
-          if (data) {
-            const officialNav = parseFloat(data.dwjz);
-            const estimatedNav = parseFloat(data.gsz);
+        script.onload = () => {
+          try {
+            // 1. Get Fund Name
+            const name = (window as any).fS_name;
             
-            // Prioritize Real-time Estimate (gsz) for a "Live" feel.
-            let price = 0;
-            let isEstimate = false;
+            // 2. Get Net Worth Trend (Official NAV history)
+            // Format: [{x: timestamp, y: nav, ...}, ...]
+            const trend = (window as any).Data_netWorthTrend;
 
-            if (!isNaN(estimatedNav) && estimatedNav > 0) {
-              price = estimatedNav;
-              isEstimate = true;
-            } else if (!isNaN(officialNav) && officialNav > 0) {
-              price = officialNav;
-              isEstimate = false;
+            if (name && Array.isArray(trend) && trend.length > 0) {
+              // Take the last item in the array, which represents the latest official NAV
+              const latest = trend[trend.length - 1];
+              const price = parseFloat(latest.y);
+
+              if (!isNaN(price) && price > 0) {
+                 complete({
+                   name: name,
+                   price: price,
+                   isEstimate: false // This comes from historical official data, not realtime estimate
+                 });
+                 return;
+              }
             }
-
-            complete({
-              name: data.name,
-              price: price,
-              isEstimate
-            });
-          } else {
+            // If data structure is invalid
+            complete(null);
+          } catch (err) {
+            console.error("Error parsing pingzhongdata", err);
             complete(null);
           }
         };
 
-        // Tiantian hardcodes the callback name to 'jsonpgz'
-        (window as any).jsonpgz = callback;
-
-        const script = document.createElement('script');
-        // Use HTTPS
-        script.src = `https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`;
-        
         script.onerror = () => {
           console.warn(`Script error fetching code: ${code}`);
           complete(null);
         };
 
+        // New URL for "Variety Data" (pingzhongdata)
+        // Adding timestamp to prevent caching
+        script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${Date.now()}`;
+        
         document.body.appendChild(script);
       });
     });
