@@ -18,13 +18,13 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
   const [mode, setMode] = useState<EntryMode>('single');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Single Entry State
+  // Single Entry State (Modified)
   const [formData, setFormData] = useState({
     name: '',
     code: '',
     type: AssetType.QUANT_FUND,
-    quantity: '',
-    costBasis: '',
+    buyAmount: '', // New: Buying Amount (Money)
+    buyNav: '',    // New: Buying NAV (Price)
   });
 
   // Batch Entry State
@@ -59,13 +59,26 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
     e.preventDefault();
     setIsProcessing(true);
     const cleanCode = formData.code.replace(/^(sh|sz|of)/i, '').trim();
+    
+    // Logic Change: Calculate Quantity from Amount / NAV
+    const amount = parseFloat(formData.buyAmount);
+    const nav = parseFloat(formData.buyNav);
+    const quantity = (amount > 0 && nav > 0) ? amount / nav : 0;
+
     const rawAsset = {
       name: formData.name || cleanCode,
       code: cleanCode,
       type: formData.type,
-      quantity: parseFloat(formData.quantity),
-      costBasis: parseFloat(formData.costBasis),
+      quantity: quantity,
+      costBasis: nav, // Cost Basis is the Buy Price (NAV)
     };
+    
+    if (quantity <= 0) {
+        alert("请输入有效的买入金额和净值");
+        setIsProcessing(false);
+        return;
+    }
+
     const finalAsset = await resolveAsset(rawAsset);
     onAddAssets([finalAsset]);
     setIsProcessing(false);
@@ -185,14 +198,19 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">持有数量</label>
-                  <input required type="number" step="any" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0.00"/>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">买入金额 (CNY)</label>
+                  <input required type="number" step="any" value={formData.buyAmount} onChange={e => setFormData({...formData, buyAmount: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="10000.00"/>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">买入成本</label>
-                  <input required type="number" step="any" value={formData.costBasis} onChange={e => setFormData({...formData, costBasis: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0.00"/>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">买入净值 (价格)</label>
+                  <input required type="number" step="any" value={formData.buyNav} onChange={e => setFormData({...formData, buyNav: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="1.250"/>
                 </div>
               </div>
+              {formData.buyAmount && formData.buyNav && (
+                  <div className="text-xs text-right text-gray-500">
+                      自动计算份额: <span className="font-bold text-gray-800">{(parseFloat(formData.buyAmount) / parseFloat(formData.buyNav)).toFixed(4)}</span>
+                  </div>
+              )}
               <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl hover:bg-indigo-700 transition font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-100">
                 {isProcessing ? <Loader2 className="animate-spin" size={18}/> : <Plus size={18} />} 
                 {isProcessing ? '正在查询最新净值...' : '确认入库'}

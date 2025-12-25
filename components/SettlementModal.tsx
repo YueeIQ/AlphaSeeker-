@@ -1,25 +1,47 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PortfolioSummary, SettlementConfig } from '../types';
-import { X, Calculator, Settings, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { X, Calculator, Settings, CheckCircle2, AlertCircle, Info, Save } from 'lucide-react';
 import { DEFAULT_SETTLEMENT_CONFIG } from '../constants';
 
 interface SettlementModalProps {
   summary: PortfolioSummary;
+  currentConfig: SettlementConfig;
+  onSaveConfig: (config: SettlementConfig) => void;
   onClose: () => void;
 }
 
-const SettlementModal: React.FC<SettlementModalProps> = ({ summary, onClose }) => {
-  const [config, setConfig] = useState<SettlementConfig>(DEFAULT_SETTLEMENT_CONFIG);
+const SettlementModal: React.FC<SettlementModalProps> = ({ summary, currentConfig, onSaveConfig, onClose }) => {
+  // Local state for editing, initialized from props
+  const [config, setConfig] = useState<SettlementConfig>(currentConfig || DEFAULT_SETTLEMENT_CONFIG);
   const [showConfig, setShowConfig] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    setConfig(currentConfig);
+  }, [currentConfig]);
+
+  const handleConfigChange = (key: keyof SettlementConfig, value: string) => {
+    const numVal = parseFloat(value);
+    setConfig(prev => {
+        const next = { ...prev, [key]: isNaN(numVal) ? 0 : numVal };
+        setHasChanges(JSON.stringify(next) !== JSON.stringify(currentConfig));
+        return next;
+    });
+  };
+
+  const handleSave = () => {
+    onSaveConfig(config);
+    setHasChanges(false);
+    setShowConfig(false);
+  };
 
   const calculations = useMemo(() => {
     const { totalCost, totalReturn, totalReturnPercent, totalValue } = summary;
-    const isProfit = totalReturn > 0;
     
     // --- 分成结算 ---
     let sharingAmount = 0;
-    const returnRate = totalReturnPercent / 100;
+    const returnRate = (totalReturnPercent || 0) / 100;
     const t1 = config.profitThreshold1 / 100;
     const t2 = config.profitThreshold2 / 100;
     const r1 = config.sharingRate1 / 100;
@@ -29,12 +51,12 @@ const SettlementModal: React.FC<SettlementModalProps> = ({ summary, onClose }) =
       // 3% - 5% 部分
       const bracket1Max = totalCost * (t2 - t1);
       const actualBracket1 = Math.min(totalReturn - (totalCost * t1), bracket1Max);
-      sharingAmount += actualBracket1 * r1;
+      sharingAmount += Math.max(0, actualBracket1 * r1);
 
       // > 5% 部分
       if (returnRate > t2) {
         const actualBracket2 = totalReturn - (totalCost * t2);
-        sharingAmount += actualBracket2 * r2;
+        sharingAmount += Math.max(0, actualBracket2 * r2);
       }
     }
 
@@ -51,7 +73,7 @@ const SettlementModal: React.FC<SettlementModalProps> = ({ summary, onClose }) =
       guaranteeAmount,
       totalCost,
       totalReturn,
-      returnRate: totalReturnPercent
+      returnRate: (totalReturnPercent || 0)
     };
   }, [summary, config]);
 
@@ -86,34 +108,41 @@ const SettlementModal: React.FC<SettlementModalProps> = ({ summary, onClose }) =
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           {showConfig && (
             <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 animate-in fade-in slide-in-from-top-4 duration-300">
-              <h3 className="text-sm font-bold text-indigo-900 mb-4 flex items-center gap-2">
-                <Settings size={14} /> 结算逻辑参数配置
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                   <Settings size={14} /> 结算逻辑参数配置
+                 </h3>
+                 {hasChanges && (
+                   <button onClick={handleSave} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-700 transition flex items-center gap-1">
+                     <Save size={12}/> 保存配置
+                   </button>
+                 )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <p className="text-xs font-black text-indigo-400 uppercase">分成阶梯设置</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600 w-24">起征点 (%)</span>
-                    <input type="number" value={config.profitThreshold1} onChange={e => setConfig({...config, profitThreshold1: parseFloat(e.target.value)})} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    <input type="number" value={config.profitThreshold1} onChange={e => handleConfigChange('profitThreshold1', e.target.value)} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600 w-24">高阶点 (%)</span>
-                    <input type="number" value={config.profitThreshold2} onChange={e => setConfig({...config, profitThreshold2: parseFloat(e.target.value)})} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    <input type="number" value={config.profitThreshold2} onChange={e => handleConfigChange('profitThreshold2', e.target.value)} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600 w-24">分成比例1 (%)</span>
-                    <input type="number" value={config.sharingRate1} onChange={e => setConfig({...config, sharingRate1: parseFloat(e.target.value)})} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    <input type="number" value={config.sharingRate1} onChange={e => handleConfigChange('sharingRate1', e.target.value)} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600 w-24">分成比例2 (%)</span>
-                    <input type="number" value={config.sharingRate2} onChange={e => setConfig({...config, sharingRate2: parseFloat(e.target.value)})} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    <input type="number" value={config.sharingRate2} onChange={e => handleConfigChange('sharingRate2', e.target.value)} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <p className="text-xs font-black text-indigo-400 uppercase">兜底设置</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600 w-24">兜底收益 (%)</span>
-                    <input type="number" value={config.guaranteeThreshold} onChange={e => setConfig({...config, guaranteeThreshold: parseFloat(e.target.value)})} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                    <input type="number" value={config.guaranteeThreshold} onChange={e => handleConfigChange('guaranteeThreshold', e.target.value)} className="flex-1 border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
                   </div>
                 </div>
               </div>

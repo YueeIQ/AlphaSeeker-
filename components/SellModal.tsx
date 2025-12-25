@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Asset } from '../types';
 import { X, TrendingUp, TrendingDown, DollarSign, AlertCircle } from 'lucide-react';
@@ -17,11 +18,12 @@ const SellModal: React.FC<SellModalProps> = ({ asset, onClose, onConfirm }) => {
   
   // Calculate derived values
   const sellQty = sellPrice > 0 ? sellAmount / sellPrice : 0;
-  const costOfSold = sellQty * asset.costBasis;
+  const costOfSold = sellQty * (asset.costBasis || 0);
   const pnl = sellAmount - costOfSold;
   
   const isProfit = pnl >= 0;
-  const remainingQty = asset.quantity - sellQty;
+  const remainingQty = (asset.quantity || 0) - sellQty;
+  const safeCostBasis = asset.costBasis || 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +61,7 @@ const SellModal: React.FC<SellModalProps> = ({ asset, onClose, onConfirm }) => {
              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">当前持仓成本</label>
                 <div className="w-full px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-500 font-mono">
-                  {asset.costBasis.toFixed(4)}
+                  {safeCostBasis.toFixed(4)}
                 </div>
              </div>
            </div>
@@ -80,10 +82,10 @@ const SellModal: React.FC<SellModalProps> = ({ asset, onClose, onConfirm }) => {
                 />
               </div>
               <div className="mt-2 flex justify-between text-xs text-gray-400">
-                <span>当前持仓市值: ¥{(asset.quantity * asset.currentPrice).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</span>
+                <span>当前持仓市值: ¥{((asset.quantity || 0) * (asset.currentPrice || 0)).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</span>
                 <button 
                   type="button" 
-                  onClick={() => setAmount((asset.quantity * asset.currentPrice).toFixed(2))}
+                  onClick={() => setAmount(((asset.quantity || 0) * (asset.currentPrice || 0)).toFixed(2))}
                   className="text-indigo-600 font-medium hover:underline"
                 >
                   全部卖出

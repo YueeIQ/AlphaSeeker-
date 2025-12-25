@@ -25,6 +25,7 @@ export interface PortfolioSummary {
   totalReturn: number;
   totalReturnPercent: number;
   allocation: Record<AssetType, number>; // Percentage 0-100
+  typeDetails: Record<AssetType, { value: number; cost: number; return: number; returnPercent: number }>;
   cashBalance: number;
   realizedLoss: number;
   realizedProfit: number;
@@ -65,5 +66,6 @@ export interface UserCloudData {
   realizedLoss?: number;
   realizedProfit?: number;
   strategy: TargetStrategy;
+  settlementConfig?: SettlementConfig;
   lastSynced: number;
 }

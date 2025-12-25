@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, RefreshCcw, TrendingUp, DollarSign, PieChart as PieIcon, Wallet, Coins, Settings, UserCircle, LogOut, Cloud, Calculator, Trash2 } from 'lucide-react';
-import { Asset, PortfolioSummary, AssetType, TargetStrategy, User, UserCloudData } from './types';
-import { INITIAL_ASSETS, DEFAULT_STRATEGY } from './constants';
+import { Plus, RefreshCcw, TrendingUp, DollarSign, PieChart as PieIcon, Wallet, Coins, Settings, UserCircle, LogOut, Cloud, Calculator, Trash2, BarChart3 } from 'lucide-react';
+import { Asset, PortfolioSummary, AssetType, TargetStrategy, User, UserCloudData, SettlementConfig } from './types';
+import { INITIAL_ASSETS, DEFAULT_STRATEGY, DEFAULT_SETTLEMENT_CONFIG } from './constants';
 import { fetchLatestPrices } from './services/market';
 import { AuthService } from './services/auth';
 import AssetEntry from './components/AssetEntry';
@@ -45,6 +45,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_STRATEGY;
   });
 
+  const [settlementConfig, setSettlementConfig] = useState<SettlementConfig>(() => {
+    const saved = localStorage.getItem('alphaSeekerSettlement');
+    return saved ? JSON.parse(saved) : DEFAULT_SETTLEMENT_CONFIG;
+  });
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStrategyModal, setShowStrategyModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
@@ -67,7 +72,8 @@ const App: React.FC = () => {
     localStorage.setItem('alphaSeekerLoss', realizedLoss.toString());
     localStorage.setItem('alphaSeekerProfit', realizedProfit.toString());
     localStorage.setItem('alphaSeekerStrategy', JSON.stringify(strategy));
-  }, [assets, cashBalance, realizedLoss, realizedProfit, strategy]);
+    localStorage.setItem('alphaSeekerSettlement', JSON.stringify(settlementConfig));
+  }, [assets, cashBalance, realizedLoss, realizedProfit, strategy, settlementConfig]);
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -80,6 +86,7 @@ const App: React.FC = () => {
           realizedLoss,
           realizedProfit,
           strategy,
+          settlementConfig,
           lastSynced: Date.now()
         };
         AuthService.saveData(cloudData)
@@ -91,7 +98,7 @@ const App: React.FC = () => {
       }, 3000);
     }
     return () => clearTimeout(timeoutId);
-  }, [assets, cashBalance, realizedLoss, realizedProfit, strategy, user]);
+  }, [assets, cashBalance, realizedLoss, realizedProfit, strategy, settlementConfig, user]);
 
   const handleLoginSuccess = async (loggedInUser: User) => {
     try {
@@ -103,6 +110,7 @@ const App: React.FC = () => {
           if (typeof cloudData.realizedLoss === 'number') setRealizedLoss(cloudData.realizedLoss);
           if (typeof cloudData.realizedProfit === 'number') setRealizedProfit(cloudData.realizedProfit);
           if (cloudData.strategy) setStrategy(cloudData.strategy);
+          if (cloudData.settlementConfig) setSettlementConfig(cloudData.settlementConfig);
         }
       }
     } catch (e) {
@@ -121,6 +129,16 @@ const App: React.FC = () => {
     let investValue = 0;
     let investCost = 0;
     const typeValue: Record<string, number> = {};
+    
+    // Initialize detailed PnL tracking for chart
+    const typeDetails: Record<AssetType, { value: number; cost: number; return: number; returnPercent: number }> = {
+       [AssetType.GOLD]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+       [AssetType.QUANT_FUND]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+       [AssetType.BOND]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+       [AssetType.NASDAQ]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+       [AssetType.BITCOIN]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+       [AssetType.CASH]: { value: 0, cost: 0, return: 0, returnPercent: 0 },
+    };
 
     assets.forEach(asset => {
       const value = asset.quantity * asset.currentPrice;
@@ -128,11 +146,29 @@ const App: React.FC = () => {
       investValue += value;
       investCost += cost;
       typeValue[asset.type] = (typeValue[asset.type] || 0) + value;
+
+      // Accumulate for detailed view
+      if (typeDetails[asset.type]) {
+          typeDetails[asset.type].value += value;
+          typeDetails[asset.type].cost += cost;
+      }
     });
 
     const totalValue = investValue + cashBalance;
     const totalCost = investCost + cashBalance;
     typeValue[AssetType.CASH] = cashBalance;
+    
+    // Add Cash to details
+    typeDetails[AssetType.CASH].value = cashBalance;
+    typeDetails[AssetType.CASH].cost = cashBalance;
+
+    // Calculate Percentages for Details
+    Object.keys(typeDetails).forEach(key => {
+        const type = key as AssetType;
+        const d = typeDetails[type];
+        d.return = d.value - d.cost;
+        d.returnPercent = d.cost > 0 ? (d.return / d.cost) * 100 : 0;
+    });
 
     const allocation: any = {};
     Object.values(AssetType).forEach(type => {
@@ -140,8 +176,6 @@ const App: React.FC = () => {
     });
     
     // Total Return = (Unrealized PnL) + (Realized PnL)
-    // Unrealized PnL = investValue - investCost
-    // Realized PnL = realizedProfit - realizedLoss
     const totalReturn = (investValue - investCost) + realizedProfit - realizedLoss;
 
     return {
@@ -150,6 +184,7 @@ const App: React.FC = () => {
       totalReturn,
       totalReturnPercent: totalCost > 0 ? (totalReturn / totalCost) * 100 : 0,
       allocation,
+      typeDetails, // New field
       cashBalance,
       realizedLoss,
       realizedProfit
@@ -379,11 +414,11 @@ const App: React.FC = () => {
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col hover:shadow-md transition">
              <div className="flex justify-between items-start mb-2">
                <div>
-                  <p className="text-sm font-medium text-gray-500">资产配置比例</p>
-                  <h2 className="text-xl font-bold text-gray-900 mt-1">分布现状</h2>
+                  <p className="text-sm font-medium text-gray-500">资产盈利分布</p>
+                  <p className="text-xs text-gray-400 mt-0.5">各类资产绝对收益贡献排行</p>
                </div>
                <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600">
-                 <PieIcon size={20} />
+                 <BarChart3 size={20} />
                </div>
              </div>
              <div className="flex-1 -ml-4">
@@ -522,6 +557,8 @@ const App: React.FC = () => {
       {showSettlementModal && (
         <SettlementModal 
           summary={summary}
+          currentConfig={settlementConfig}
+          onSaveConfig={setSettlementConfig}
           onClose={() => setShowSettlementModal(false)}
         />
       )}
@@ -538,7 +575,7 @@ const App: React.FC = () => {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onLoginSuccess={handleLoginSuccess}
-        currentData={{ assets, cashBalance, realizedLoss, realizedProfit, strategy, lastSynced: Date.now() }}
+        currentData={{ assets, cashBalance, realizedLoss, realizedProfit, strategy, settlementConfig, lastSynced: Date.now() }}
       />
     </div>
   );
