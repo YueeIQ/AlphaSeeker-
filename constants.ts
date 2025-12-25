@@ -1,8 +1,7 @@
 
-import { AssetType, TargetStrategy } from './types';
+import { AssetType, TargetStrategy, SettlementConfig } from './types';
 
 // The "Smart Money" Strategy
-// Revised defaults: Quant (50%), Gold (20%), Bond (15%), Nasdaq (10%), Cash (5%), Bitcoin (0%).
 export const DEFAULT_STRATEGY: TargetStrategy = {
   allocations: {
     [AssetType.QUANT_FUND]: 50,
@@ -13,6 +12,14 @@ export const DEFAULT_STRATEGY: TargetStrategy = {
     [AssetType.CASH]: 5, 
   },
   maxDeviation: 15, // If an asset drifts > 15% from its target weight (relative), trigger RED.
+};
+
+export const DEFAULT_SETTLEMENT_CONFIG: SettlementConfig = {
+  profitThreshold1: 3,
+  profitThreshold2: 5,
+  sharingRate1: 20,
+  sharingRate2: 50,
+  guaranteeThreshold: 3,
 };
 
 export const INITIAL_ASSETS: any[] = [];

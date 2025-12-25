@@ -26,11 +26,21 @@ export interface PortfolioSummary {
   totalReturnPercent: number;
   allocation: Record<AssetType, number>; // Percentage 0-100
   cashBalance: number;
+  realizedLoss: number;
+  realizedProfit: number;
 }
 
 export interface TargetStrategy {
   allocations: Record<AssetType, number>; // Target %
   maxDeviation: number; // Threshold for Red light (e.g., 20% relative deviation)
+}
+
+export interface SettlementConfig {
+  profitThreshold1: number; // e.g., 3
+  profitThreshold2: number; // e.g., 5
+  sharingRate1: number; // e.g., 20
+  sharingRate2: number; // e.g., 50
+  guaranteeThreshold: number; // e.g., 3
 }
 
 export interface MarketData {
@@ -52,6 +62,8 @@ export interface User {
 export interface UserCloudData {
   assets: Asset[];
   cashBalance: number;
+  realizedLoss?: number;
+  realizedProfit?: number;
   strategy: TargetStrategy;
   lastSynced: number;
 }
