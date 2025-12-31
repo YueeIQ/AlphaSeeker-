@@ -1,20 +1,30 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AssetType, Asset } from '../types';
-import { Plus, Upload, X, Loader2, Coins, TrendingDown, FileText, LayoutGrid } from 'lucide-react';
+import { Plus, Upload, X, Loader2, Coins, TrendingDown, FileText, LayoutGrid, Edit2, RotateCcw } from 'lucide-react';
 import { lookupAssetDetails } from '../services/market';
 
 interface AssetEntryProps {
   onAddAssets: (assets: Omit<Asset, 'id' | 'lastUpdated'>[]) => void;
   onUpdateCash: (amount: number) => void;
   onAddLoss: (amount: number) => void;
+  onSetLoss: (amount: number) => void; // New: Capability to override total loss
   currentCash: number;
+  currentLoss: number; // New: Display current loss
   onClose: () => void;
 }
 
 type EntryMode = 'single' | 'batch' | 'cash' | 'loss';
 
-const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAddLoss, currentCash, onClose }) => {
+const AssetEntry: React.FC<AssetEntryProps> = ({ 
+  onAddAssets, 
+  onUpdateCash, 
+  onAddLoss, 
+  onSetLoss,
+  currentCash, 
+  currentLoss,
+  onClose 
+}) => {
   const [mode, setMode] = useState<EntryMode>('single');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -34,7 +44,19 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
   const [cashInput, setCashInput] = useState(currentCash.toString());
 
   // Loss State
+  const [lossMode, setLossMode] = useState<'add' | 'set'>('add'); // 'add' = Cumulative, 'set' = Override
   const [lossInput, setLossInput] = useState('');
+
+  // Effect to pre-fill loss input when switching to 'set' mode
+  useEffect(() => {
+    if (mode === 'loss') {
+        if (lossMode === 'set') {
+            setLossInput(currentLoss.toString());
+        } else {
+            setLossInput('');
+        }
+    }
+  }, [lossMode, mode, currentLoss]);
 
   const resolveAsset = async (baseAsset: any) => {
     let fetchedPrice = 0;
@@ -139,12 +161,17 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
   const handleLossSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(lossInput);
-    if (!isNaN(val) && val > 0) {
-      onAddLoss(val);
-      onClose();
-    } else {
-      alert("请输入有效的亏损金额");
+    if (isNaN(val) || val < 0) {
+      alert("请输入有效的金额");
+      return;
     }
+
+    if (lossMode === 'add') {
+      onAddLoss(val);
+    } else {
+      onSetLoss(val);
+    }
+    onClose();
   };
 
   return (
@@ -162,7 +189,7 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
             { id: 'single', label: '单个资产', icon: <Plus size={14}/> },
             { id: 'batch', label: '批量导入', icon: <LayoutGrid size={14}/> },
             { id: 'cash', label: '现金调整', icon: <Coins size={14}/> },
-            { id: 'loss', label: '亏损录入', icon: <TrendingDown size={14}/> },
+            { id: 'loss', label: '亏损管理', icon: <TrendingDown size={14}/> },
           ].map((tab) => (
             <button 
               key={tab.id}
@@ -251,16 +278,57 @@ const AssetEntry: React.FC<AssetEntryProps> = ({ onAddAssets, onUpdateCash, onAd
 
           {mode === 'loss' && (
             <form onSubmit={handleLossSubmit} className="space-y-4">
-              <div className="bg-red-50 p-4 rounded-xl border border-red-100 mb-4">
-                <p className="text-xs text-red-500 font-bold mb-1 uppercase tracking-wider">功能说明</p>
-                <p className="text-sm text-red-700 leading-relaxed">直接录入已实现的亏损（如割肉离场）。该金额将从总盈利中扣除，但不影响当前持仓市值。</p>
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 mb-4 flex justify-between items-center">
+                 <div>
+                    <p className="text-xs text-red-500 font-bold mb-1 uppercase tracking-wider">历史已实现亏损总额</p>
+                    <p className="text-2xl font-black text-red-900">¥{currentLoss.toLocaleString()}</p>
+                 </div>
+                 <div className="bg-white/50 p-1.5 rounded-lg border border-red-100">
+                   <TrendingDown className="text-red-500" size={24} />
+                 </div>
               </div>
+
+              {/* Toggle Switch */}
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setLossMode('add')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-md transition-all ${lossMode === 'add' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Plus size={14} /> 新增亏损
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLossMode('set')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-md transition-all ${lossMode === 'set' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Edit2 size={14} /> 修正总额
+                </button>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">新增亏损金额 (CNY)</label>
-                <input autoFocus type="number" step="any" value={lossInput} onChange={e => setLossInput(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-lg font-bold text-red-600" placeholder="0.00"/>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {lossMode === 'add' ? '新增亏损金额 (CNY)' : '修正后亏损总额 (CNY)'}
+                </label>
+                <input 
+                  autoFocus 
+                  type="number" 
+                  step="any" 
+                  value={lossInput} 
+                  onChange={e => setLossInput(e.target.value)} 
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-lg font-bold text-red-600" 
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                    {lossMode === 'add' 
+                      ? '此金额将累加到当前总亏损中。' 
+                      : '直接覆盖当前总亏损数据，用于纠错或重新统计。'}
+                </p>
               </div>
-              <button type="submit" className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition font-bold shadow-lg shadow-red-100">
-                确认录入亏损
+
+              <button type="submit" className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition font-bold shadow-lg shadow-red-100 flex items-center justify-center gap-2">
+                {lossMode === 'add' ? <Plus size={18}/> : <RotateCcw size={18}/>}
+                {lossMode === 'add' ? '确认累加亏损' : '确认覆盖总额'}
               </button>
             </form>
           )}

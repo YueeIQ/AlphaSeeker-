@@ -47,7 +47,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({ summary }) => {
   }
 
   // Transform data: Filter out assets with no value/activity, Sort by Profit Descending
-  const data = Object.entries(summary.typeDetails)
+  const data = (Object.entries(summary.typeDetails) as [string, { value: number; cost: number; return: number; returnPercent: number }][])
     .filter(([_, detail]) => detail.value > 0 || Math.abs(detail.return) > 1) 
     .map(([type, detail]) => ({
       name: type,

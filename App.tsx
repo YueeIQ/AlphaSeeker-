@@ -541,7 +541,9 @@ const App: React.FC = () => {
           onAddAssets={handleAddAssets} 
           onUpdateCash={setCashBalance}
           onAddLoss={(amount) => setRealizedLoss(prev => prev + amount)}
+          onSetLoss={setRealizedLoss}
           currentCash={cashBalance}
+          currentLoss={realizedLoss}
           onClose={() => setShowAddModal(false)} 
         />
       )}
